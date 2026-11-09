@@ -1,0 +1,166 @@
+#!/bin/bash
+set -euo pipefail
+
+# Runs inside the chroot during live-build. Configures a Sonoma-inspired XFCE UI.
+# Open-source components only; no Apple assets.
+
+export DEBIAN_FRONTEND=noninteractive
+
+log() { echo "[goose-ui] $*"; }
+
+# --- Live user defaults (Debian live usually uses 'user') ---
+mkdir -p /etc/skel/.config /etc/skel/.local/share /etc/skel/Pictures
+
+# --- Fetch open-source macOS-inspired theme assets at build time (best effort) ---
+TMP=/tmp/goose-ui
+mkdir -p "$TMP"
+cd "$TMP"
+
+fetch() {
+  local url="$1" out="$2"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL --retry 3 -o "$out" "$url" || return 1
+  else
+    wget -qO "$out" "$url" || return 1
+  fi
+}
+
+# WhiteSur GTK theme (Sonoma-like accents/rounded style) - MIT/GPL per upstream; best effort clone
+if command -v git >/dev/null 2>&1; then
+  log "Installing WhiteSur GTK theme (approximation)..."
+  git clone --depth=1 https://github.com/vinceliuice/WhiteSur-gtk-theme.git whitesur-gtk || true
+  if [[ -d whitesur-gtk ]]; then
+    ./whitesur-gtk/install.sh -d /usr/share/themes -n WhiteSur -t all -N glassy --normal || \
+    ./whitesur-gtk/install.sh -d /usr/share/themes -n WhiteSur || true
+  fi
+
+  log "Installing WhiteSur icon theme..."
+  git clone --depth=1 https://github.com/vinceliuice/WhiteSur-icon-theme.git whitesur-icons || true
+  if [[ -d whitesur-icons ]]; then
+    ./whitesur-icons/install.sh -d /usr/share/icons -n WhiteSur || true
+  fi
+
+  log "Installing WhiteSur wallpaper set..."
+  git clone --depth=1 https://github.com/vinceliuice/WhiteSur-wallpapers.git whitesur-wall || true
+  if [[ -d whitesur-wall ]]; then
+    mkdir -p /usr/share/backgrounds/goose
+    cp -f whitesur-wall/*.png /usr/share/backgrounds/goose/ 2>/dev/null || true
+    cp -f whitesur-wall/*.jpg /usr/share/backgrounds/goose/ 2>/dev/null || true
+  fi
+else
+  log "git not available; skipping theme clone"
+fi
+
+# Fallback wallpaper
+if ! ls /usr/share/backgrounds/goose/* >/dev/null 2>&1; then
+  mkdir -p /usr/share/backgrounds/goose
+  if command -v convert >/dev/null 2>&1; then
+    convert -size 3840x2160 gradient:'#7aa7d9-#d7c7b5' /usr/share/backgrounds/goose/goose-sonoma.jpg || true
+  fi
+fi
+
+# --- Plank dock (Sonoma-like bottom dock) ---
+mkdir -p /etc/skel/.config/autostart /etc/skel/.config/plank/dock1/launchers
+cat > /etc/skel/.config/autostart/plank.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Plank
+Exec=plank
+X-XFCE-Autostart-Override=true
+OnlyShowIn=XFCE;
+EOF
+
+cat > /etc/skel/.config/plank/dock1/launchers/firefox-esr.dockitem <<'EOF'
+[PlankDockItemPreferences]
+Launcher=file:///usr/share/applications/firefox-esr.desktop
+EOF
+cat > /etc/skel/.config/plank/dock1/launchers/thunar.dockitem <<'EOF'
+[PlankDockItemPreferences]
+Launcher=file:///usr/share/applications/thunar.desktop
+EOF
+cat > /etc/skel/.config/plank/dock1/launchers/xfce4-terminal.dockitem <<'EOF'
+[PlankDockItemPreferences]
+Launcher=file:///usr/share/applications/xfce4-terminal.desktop
+EOF
+
+# --- XFCE panel/layout defaults: top bar feel ---
+mkdir -p /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml /etc/skel/.config/xfce4/panel
+
+cat > /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xsettings" version="1.0">
+  <property name="Net" type="empty">
+    <property name="ThemeName" type="string" value="WhiteSur-Light"/>
+    <property name="IconThemeName" type="string" value="WhiteSur"/>
+  </property>
+  <property name="Gtk" type="empty">
+    <property name="FontName" type="string" value="Noto Sans 10"/>
+    <property name="DecorationLayout" type="string" value="close,minimize,maximize:"/>
+  </property>
+</channel>
+EOF
+
+cat > /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfwm4" version="1.0">
+  <property name="general" type="empty">
+    <property name="theme" type="string" value="WhiteSur-Light"/>
+    <property name="title_font" type="string" value="Noto Sans Bold 10"/>
+    <property name="button_layout" type="string" value="CHM|"/>
+    <property name="placement_ratio" type="int" value="20"/>
+  </property>
+</channel>
+EOF
+
+# Desktop backdrop (best available Goose wallpaper)
+WALL="$(ls /usr/share/backgrounds/goose/* 2>/dev/null | head -n1 || true)"
+if [[ -n "${WALL}" ]]; then
+  cat > /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-desktop" version="1.0">
+  <property name="backdrop" type="empty">
+    <property name="screen0" type="empty">
+      <property name="monitorVirtual1" type="empty">
+        <property name="workspace0" type="empty">
+          <property name="last-image" type="string" value="${WALL}"/>
+          <property name="image-style" type="int" value="5"/>
+        </property>
+      </property>
+      <property name="monitor0" type="empty">
+        <property name="workspace0" type="empty">
+          <property name="last-image" type="string" value="${WALL}"/>
+          <property name="image-style" type="int" value="5"/>
+        </property>
+      </property>
+    </property>
+  </property>
+</channel>
+EOF
+fi
+
+# --- LightDM greeter branding ---
+mkdir -p /etc/lightdm
+cat > /etc/lightdm/lightdm-gtk-greeter.conf <<EOF
+[greeter]
+background=${WALL:-/usr/share/backgrounds/goose/goose-sonoma.jpg}
+theme-name=WhiteSur-Light
+icon-theme-name=WhiteSur
+font-name=Noto Sans 10
+xft-antialias=true
+xft-hintstyle=hintslight
+xft-rgba=rgb
+indicators=~host;~spacer;~clock;~spacer;~session;~power
+EOF
+
+# --- OS identity ---
+cat > /etc/os-release <<'EOF'
+PRETTY_NAME="Goose OS (Sonoma-inspired)"
+NAME="Goose OS"
+VERSION_ID="1.0"
+VERSION="1.0 (Bookworm)"
+ID=gooseos
+ID_LIKE=debian
+HOME_URL="https://example.invalid/goose-os"
+EOF
+
+log "UI configuration complete"

@@ -1,0 +1,50 @@
+# Goose OS — packages (Debian Bookworm live)
+# Desktop base
+task-xfce-desktop
+xfce4
+xfce4-goodies
+xfce4-whiskermenu-plugin
+plank
+dbus-x11
+xorg
+lightdm
+lightdm-gtk-greeter
+network-manager
+network-manager-gnome
+pulseaudio
+pavucontrol
+
+# Look & feel helpers
+fonts-noto
+fonts-dejavu
+papirus-icon-theme
+gnome-themes-extra
+adwaita-icon-theme
+gtk2-engines-murrine
+gtk2-engines-pixbuf
+sassc
+optipng
+inkscape
+imagemagick
+
+# VirtualBox guest support (install guest additions from ISO inside VM for best results)
+virtualbox-guest-utils
+virtualbox-guest-x11
+
+# Utilities
+sudo
+ca-certificates
+curl
+wget
+git
+unzip
+gvfs
+gvfs-backends
+file-roller
+mousepad
+firefox-esr
+neofetch
+htop
+
+# Firmware (improves VM/hardware compatibility)
+firmware-linux
