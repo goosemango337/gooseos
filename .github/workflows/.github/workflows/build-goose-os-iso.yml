@@ -1,0 +1,44 @@
+name: Build Goose OS ISO (Linux)
+
+on:
+  push:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+jobs:
+  build-iso:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install live-build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            live-build debootstrap squashfs-tools xorriso isolinux \
+            wget curl git ca-certificates rsync
+
+      - name: Build Goose OS ISO
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f scripts/build.sh ]; then
+            sudo chmod +x scripts/build.sh
+            sudo ./scripts/build.sh
+          elif [ -f goose-os/scripts/build.sh ]; then
+            cd goose-os
+            sudo chmod +x scripts/build.sh
+            sudo ./scripts/build.sh
+          else
+            echo "build.sh not found (add the goose-os project files to the repo)" >&2; exit 1
+          fi
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: goose-os-amd64-hybrid-iso
+          path: "**/artifacts/*.iso"
+          if-no-files-found: error
+          retention-days: 14
